@@ -8,8 +8,14 @@
       <UniqueIdentifier>{f18ab499-84e1-499f-8eff-9754361e0e52}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="gl3w">
-      <UniqueIdentifier>{f9997b32-5479-4756-9ffc-77793ad3764f}</UniqueIdentifier>
+    <Filter Include="imgui\backends">
+      <UniqueIdentifier>{a233ee3f-0bad-4218-8a79-c023ccd1a310}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sqlite">
+      <UniqueIdentifier>{67a009f7-3833-4e49-b561-193bdfa74082}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ImGuiColorTextEditor">
+      <UniqueIdentifier>{b5b7c634-0f84-4746-9e80-d5e4ae99ad38}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -25,16 +31,25 @@
     <ClCompile Include="main.cpp">
       <Filter>sources</Filter>
     </ClCompile>
-    <ClCompile Include="imgui\examples\libs\gl3w\GL\gl3w.c">
-      <Filter>gl3w</Filter>
-    </ClCompile>
-    <ClCompile Include="imgui\examples\imgui_impl_opengl3.cpp">
-      <Filter>sources</Filter>
-    </ClCompile>
-    <ClCompile Include="imgui\examples\imgui_impl_sdl.cpp">
-      <Filter>sources</Filter>
-    </ClCompile>
     <ClCompile Include="imgui\imgui_widgets.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="sqlite\shell.c">
+      <Filter>sqlite</Filter>
+    </ClCompile>
+    <ClCompile Include="sqlite\sqlite3.c">
+      <Filter>sqlite</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGuiColorTextEdit\TextEditor.cpp">
+      <Filter>ImGuiColorTextEditor</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\backends\imgui_impl_dx12.cpp">
+      <Filter>imgui\backends</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\backends\imgui_impl_win32.cpp">
+      <Filter>imgui\backends</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_tables.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
   </ItemGroup>
@@ -48,17 +63,20 @@
     <ClInclude Include="imgui\imgui_internal.h">
       <Filter>imgui</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\examples\libs\gl3w\GL\gl3w.h">
-      <Filter>gl3w</Filter>
+    <ClInclude Include="imgui\backends\imgui_impl_win32.h">
+      <Filter>imgui\backends</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\examples\libs\gl3w\GL\glcorearb.h">
-      <Filter>gl3w</Filter>
+    <ClInclude Include="imgui\backends\imgui_impl_dx12.h">
+      <Filter>imgui\backends</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\examples\imgui_impl_opengl3.h">
-      <Filter>sources</Filter>
+    <ClInclude Include="sqlite\sqlite3.h">
+      <Filter>sqlite</Filter>
     </ClInclude>
-    <ClInclude Include="imgui\examples\imgui_impl_sdl.h">
-      <Filter>sources</Filter>
+    <ClInclude Include="sqlite\sqlite3ext.h">
+      <Filter>sqlite</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGuiColorTextEdit\TextEditor.h">
+      <Filter>ImGuiColorTextEditor</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
