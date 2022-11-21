@@ -16,6 +16,7 @@
 #include "sqlite/sqlite3.h"
 #include "program.h"
 #include "ImGuiColorTextEdit/TextEditor.h"
+#include <commdlg.h>
 
 #ifdef _DEBUG
 #define DX12_ENABLE_DEBUG_LAYER
@@ -153,10 +154,35 @@ int main(int argc, char** argv)
     bool show_demo_window = true;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    const char* db_path = argc > 1 ? argv[1] : "";
-    Program ThisProgram;
+    const auto OpenDatabaseMethod = [hwnd]() {
+        std::string Path;
+        Path.resize(260);
+        OPENFILENAME ofn;       // common dialog box structure
 
-    ThisProgram.Init(db_path);
+        // Initialize OPENFILENAME
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = hwnd;
+        ofn.lpstrFile = &Path.front();
+        // Set lpstrFile[0] to '\0' so that GetOpenFileName does not 
+        // use the contents of szFile to initialize itself.
+        ofn.lpstrFile[0] = '\0';
+        ofn.nMaxFile = Path.length();
+        ofn.lpstrFilter = "*.db\0";
+        ofn.nFilterIndex = 1;
+        ofn.lpstrFileTitle = NULL;
+        ofn.nMaxFileTitle = 0;
+        ofn.lpstrInitialDir = NULL;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+        if (GetOpenFileName(&ofn))
+        {
+            return Path;
+        }
+        return std::string();
+    };
+    Program ThisProgram(OpenDatabaseMethod);
+
+    ThisProgram.Init();
    
     // Main loop
     bool done = false;

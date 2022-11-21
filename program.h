@@ -1,21 +1,26 @@
 
 #include "sqlite/sqlite3.h"
 #include "ImGuiColorTextEdit/TextEditor.h"
+#include <functional>
+#include <string>
 
 struct sqlite3;
+
+using OpenFileMethod = std::function <std::string()>;
 
 class Program
 {
 public: 
 
-	Program();
+	Program(OpenFileMethod InOpenFile);
 
-	void Init(const char* db_path);
+	void Init();
 	void MainLoopUpdate();
 	void Shutdown();
 
 private:
 
+	OpenFileMethod OpenFile;
 	sqlite3* db;
 	TextEditor editor;
 	const char* query = "select * from sqlite_master";

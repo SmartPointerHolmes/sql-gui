@@ -39,20 +39,25 @@ void DisplayTable(char** result, int rows, int cols)
     }
 }
 
-Program::Program()
-    : db(nullptr)
+Program::Program(OpenFileMethod InOpenFile)
+    : OpenFile(std::move(InOpenFile))
+    , db(nullptr)
 {
 }
 
-void Program::Init(const char* db_path)
+void Program::Init()
 {
-    char* err_msg = NULL;
-    int rc;
-    rc = sqlite3_open(db_path, &db);
-    if (rc) {
-        fprintf(stderr, "Failed to open database %s: %s", db_path, sqlite3_errmsg(db));
-        sqlite3_close(db);
-        exit(1);
+    if (OpenFile)
+    {
+        auto FilePath = OpenFile();
+        int rc;
+        rc = sqlite3_open(FilePath.c_str(), &db);
+
+        if (rc) {
+            fprintf(stderr, "Failed to open database %s: %s", FilePath.c_str(), sqlite3_errmsg(db));
+            sqlite3_close(db);
+            exit(1);
+        }
     }
 
     auto lang = TextEditor::LanguageDefinition::SQL();
