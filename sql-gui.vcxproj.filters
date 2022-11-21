@@ -52,6 +52,9 @@
     <ClCompile Include="imgui\imgui_tables.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
+    <ClCompile Include="program.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h">
@@ -77,6 +80,9 @@
     </ClInclude>
     <ClInclude Include="ImGuiColorTextEdit\TextEditor.h">
       <Filter>ImGuiColorTextEditor</Filter>
+    </ClInclude>
+    <ClInclude Include="program.h">
+      <Filter>sources</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
