@@ -15,7 +15,7 @@ public:
 	Program(OpenFileMethod InOpenFile);
 
 	void Init();
-	void MainLoopUpdate();
+	bool MainLoopUpdate();
 	void Shutdown();
 
 private:

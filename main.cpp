@@ -65,13 +65,22 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 
 // Main code
-int main(int argc, char** argv)
+int main(int , char** )
 {
+    ::ShowWindow(GetConsoleWindow(), SW_MINIMIZE);
+
     // Create application window
     //ImGui_ImplWin32_EnableDpiAwareness();
-    WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, _T("ImGui Example"), NULL };
-    ::RegisterClassEx(&wc);
-    HWND hwnd = ::CreateWindow(wc.lpszClassName, _T("Dear ImGui DirectX12 Example"), WS_OVERLAPPEDWINDOW, 100, 100, 1280, 800, NULL, NULL, wc.hInstance, NULL);
+    DWORD WindowWidth = 1280;
+    DWORD WindowHeight = 800;
+    RECT desktop;
+    GetWindowRect(GetDesktopWindow(), &desktop);
+    WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, _T("Emission Audio"), NULL };
+    RegisterClassEx(&wc);
+    HWND hwnd = CreateWindowEx(WS_EX_TOPMOST | WS_EX_LAYERED, wc.lpszClassName, _T("SQlite Viewer"), WS_POPUP, (desktop.right / 2) - (WindowWidth / 2), (desktop.bottom / 2) - (WindowHeight / 2), WindowWidth, WindowHeight, 0, 0, wc.hInstance, 0);
+
+    SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+    //SetLayeredWindowAttributes(hwnd, RGB(0, 0, 0), 0, ULW_COLORKEY);
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))
@@ -82,7 +91,7 @@ int main(int argc, char** argv)
     }
 
     // Show the window
-    ::ShowWindow(hwnd, SW_SHOWDEFAULT);
+    //::ShowWindow(hwnd, SW_SHOWDEFAULT);
     ::UpdateWindow(hwnd);
 
     // Setup Dear ImGui context
@@ -151,12 +160,11 @@ int main(int argc, char** argv)
     io.Fonts->AddFontFromFileTTF("fonts/NotoSansMono-Regular.ttf", 16.0f);
 
     // Our state
-    bool show_demo_window = true;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     const auto OpenDatabaseMethod = [hwnd]() {
         std::string Path;
-        Path.resize(260);
+        Path.resize(MAX_PATH);
         OPENFILENAME ofn;       // common dialog box structure
 
         // Initialize OPENFILENAME
@@ -167,7 +175,7 @@ int main(int argc, char** argv)
         // Set lpstrFile[0] to '\0' so that GetOpenFileName does not 
         // use the contents of szFile to initialize itself.
         ofn.lpstrFile[0] = '\0';
-        ofn.nMaxFile = Path.length();
+        ofn.nMaxFile = MAX_PATH;
         ofn.lpstrFilter = "*.db\0";
         ofn.nFilterIndex = 1;
         ofn.lpstrFileTitle = NULL;
@@ -209,12 +217,8 @@ int main(int argc, char** argv)
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
         // 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
-        ThisProgram.MainLoopUpdate();
+        done = ThisProgram.MainLoopUpdate();
 
         // Rendering
         ImGui::Render();
