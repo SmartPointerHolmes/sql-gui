@@ -22,19 +22,10 @@ You can browse individual records within each table.
 
 ## Building
 
-	% make
+	Via visual studio solution (2019)
 
 ## Running
 
-	% ./sql-gui [database] [sql]
-
-You can use the included sample database like this:
-
-	% ./sql-gui sql-murder-mystery.db "select * from person"
-
-If no database is specified, then an empty database is created in memory. You can create tables and records via the SQL input area, but there is no feature to save the database to disk.
-
-If no SQL is specified on the command line, a default query is displayed.
 
 ## Thanks
 
