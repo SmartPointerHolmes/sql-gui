@@ -162,7 +162,7 @@ int main(int , char** )
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    const auto OpenDatabaseMethod = [hwnd]() {
+    const auto OpenFileMethod = [hwnd](const char* FileExtFilter) {
         std::string Path;
         Path.resize(MAX_PATH);
         OPENFILENAME ofn;       // common dialog box structure
@@ -176,7 +176,7 @@ int main(int , char** )
         // use the contents of szFile to initialize itself.
         ofn.lpstrFile[0] = '\0';
         ofn.nMaxFile = MAX_PATH;
-        ofn.lpstrFilter = "*.db\0";
+        ofn.lpstrFilter = FileExtFilter;
         ofn.nFilterIndex = 1;
         ofn.lpstrFileTitle = NULL;
         ofn.nMaxFileTitle = 0;
@@ -188,7 +188,7 @@ int main(int , char** )
         }
         return std::string();
     };
-    const auto NewDatabaseMethod = [hwnd]() {
+    const auto NewFileMethod = [hwnd](const char* FileExtFilter) {
         std::string Path;
         Path.resize(MAX_PATH);
         OPENFILENAME ofn;       // common dialog box structure
@@ -202,7 +202,7 @@ int main(int , char** )
         // use the contents of szFile to initialize itself.
         ofn.lpstrFile[0] = '\0';
         ofn.nMaxFile = MAX_PATH;
-        ofn.lpstrFilter = "*.db\0";
+        ofn.lpstrFilter = FileExtFilter;
         ofn.nFilterIndex = 1;
         ofn.lpstrFileTitle = NULL;
         ofn.nMaxFileTitle = 0;
@@ -214,7 +214,7 @@ int main(int , char** )
         }
         return std::string();
     };
-    Program ThisProgram(OpenDatabaseMethod, NewDatabaseMethod);
+    Program ThisProgram(OpenFileMethod, NewFileMethod);
 
     ThisProgram.Init();
    

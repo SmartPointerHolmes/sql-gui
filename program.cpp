@@ -48,19 +48,6 @@ Program::Program(OpenFileMethod InOpenFile, OpenFileMethod InNewFile)
 
 void Program::Init()
 {
-    if (OpenFile)
-    {
-        auto FilePath = OpenFile();
-        int rc;
-        rc = sqlite3_open(FilePath.c_str(), &ActiveDatabase);
-
-        if (rc) {
-            fprintf(stderr, "Failed to open database %s: %s", FilePath.c_str(), sqlite3_errmsg(ActiveDatabase));
-            sqlite3_close(ActiveDatabase);
-            exit(1);
-        }
-    }
-
     auto lang = TextEditor::LanguageDefinition::SQL();
     editor.SetLanguageDefinition(lang);
     editor.SetShowWhitespaces(false);
@@ -218,14 +205,14 @@ void Program::DrawTablesView()
     if (ImGui::Button("New Database")) {
         if (NewFile)
         {
-            FilePath = NewFile();
+            FilePath = NewFile(".db\0");
         }
     }
     ImGui::SameLine();
     if (ImGui::Button("Open Database")) {
         if (OpenFile)
         {
-            FilePath = OpenFile();
+            FilePath = OpenFile(".db\0");
         }
     }
     if (FilePath.size() > 0)

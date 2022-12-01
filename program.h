@@ -7,7 +7,7 @@
 
 struct sqlite3;
 
-using OpenFileMethod = std::function <std::string()>;
+using OpenFileMethod = std::function <std::string(const char*)>;
 
 class TableHandle final
 {
