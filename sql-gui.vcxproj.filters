@@ -17,6 +17,9 @@
     <Filter Include="ImGuiColorTextEditor">
       <UniqueIdentifier>{b5b7c634-0f84-4746-9e80-d5e4ae99ad38}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Seralisation">
+      <UniqueIdentifier>{17c0c20b-6d88-4024-8f05-475ef636e4ef}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="imgui\imgui.cpp">
@@ -55,6 +58,12 @@
     <ClCompile Include="program.cpp">
       <Filter>sources</Filter>
     </ClCompile>
+    <ClCompile Include="Serialisation\BinaryReader.cpp">
+      <Filter>Seralisation</Filter>
+    </ClCompile>
+    <ClCompile Include="Serialisation\DataTable.cpp">
+      <Filter>Seralisation</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h">
@@ -83,6 +92,12 @@
     </ClInclude>
     <ClInclude Include="program.h">
       <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="Serialisation\BinaryReader.h">
+      <Filter>Seralisation</Filter>
+    </ClInclude>
+    <ClInclude Include="Serialisation\DataTable.h">
+      <Filter>Seralisation</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

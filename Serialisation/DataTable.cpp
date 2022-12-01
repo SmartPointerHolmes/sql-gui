@@ -1,0 +1,349 @@
+
+#include "DataTable.h"
+#include "BinaryReader.h"
+#include <stdexcept>
+
+DataTable::DataTable()
+{
+}
+
+const std::wstring *const  DataTable::GetCell(size_t Row, size_t Column)const
+{
+	if (GetNumRows() > Row && GetNumColumns() > Column)
+	{
+		return &mTable[Row][Column];
+	}
+	return nullptr;
+}
+
+void DataTable::SetSize(size_t NumRows, size_t NumColumns)
+{
+	mTable.resize(NumRows);
+	for (auto&& Row : mTable)
+	{
+		Row.resize(NumColumns);
+	}
+}
+
+void DataTable::SetCell(size_t RowIndex, size_t ColumnIndex, std::wstring& Value)
+{
+	if (RowIndex < mTable.size())
+	{
+		auto& Column = mTable[RowIndex];
+		if (ColumnIndex < Column.size())
+		{
+			Column[ColumnIndex] = Value;
+		}
+	}
+}
+void DataTable::SetRow(size_t RowIndex, const std::vector<std::wstring>& Values)
+{
+	if (RowIndex < mTable.size())
+	{
+		auto& Row = mTable[RowIndex];
+		if (Values.size() == Row.size())
+		{
+			Row = Values;
+		}
+		else if (Values.size() < Row.size())
+		{
+			for (size_t ValueIndex = 0; ValueIndex < Values.size(); ++ValueIndex)
+			{
+				Row[ValueIndex] = Values[ValueIndex];
+			}
+		}
+	}
+}
+size_t DataTable::GetSizeInBytesAsCSV() const
+{
+	size_t DataSize = 0;
+	for (auto& Row : mTable)
+	{
+		for (auto& Column : Row)
+		{
+			DataSize += Column.size() * sizeof(wchar_t);
+		}
+	}
+
+	const auto NumRows = GetNumRows();
+	const auto NumColumns = GetNumColumns();
+	DataSize += sizeof(wchar_t) * NumRows * NumColumns; // commas
+	DataSize += sizeof(wchar_t) * NumRows; // carriage returns
+
+	return DataSize;
+}
+	
+DataTablePtr DataTable::CreateFromCSV(BinaryReader & Reader)
+{
+	constexpr char CarriageReturn = '\n';
+	constexpr char Comma = ',';
+	size_t StartOfBuffer = Reader.GetReadPosition();
+	size_t NumColumns = 0;
+	size_t NumRows = 0;
+	size_t MaxLengthRow = 0;
+	size_t CurrentLengthRow = 0;
+	char Character = (char)Reader.ReadUInt8();
+
+	NumRows++;
+	NumColumns++;
+	while (Character != CarriageReturn && Reader.GetReadPosition() < Reader.GetDataLength())
+	{
+		CurrentLengthRow++;
+		if (Character == Comma)
+		{
+			MaxLengthRow = std::max(CurrentLengthRow, MaxLengthRow);
+			CurrentLengthRow = 0;
+			NumColumns++;
+		}
+		Character = (char)Reader.ReadUInt8();
+	}
+	NumRows++;
+	while (Reader.GetReadPosition() < Reader.GetDataLength())
+	{
+		Character = (char)Reader.ReadUInt8();
+		CurrentLengthRow++;
+
+		if (Character == CarriageReturn)
+		{
+			NumRows++;
+			MaxLengthRow = std::max(CurrentLengthRow, MaxLengthRow);
+			CurrentLengthRow = 0;
+		}
+	}
+
+	DataTablePtr NewTable = std::make_shared<DataTable>();
+	NewTable->mTable.resize(NumRows);
+	for (auto& Column : NewTable->mTable)
+	{
+		Column.resize(NumColumns);
+	}
+
+	Reader.Seek(StartOfBuffer);
+
+	size_t RowIndex = 0;
+	size_t ColumnIndex = 0;
+	std::wstring TempData;
+	TempData.reserve(MaxLengthRow);
+	while (Reader.GetReadPosition() < Reader.GetDataLength())
+	{
+		Character = (char)Reader.ReadUInt8();
+		if (Character == Comma)
+		{
+			NewTable->mTable[RowIndex][ColumnIndex] = TempData.data();
+			ColumnIndex++;
+			TempData.clear();
+		}
+		else if (Character == CarriageReturn)
+		{
+			NewTable->mTable[RowIndex][ColumnIndex] = TempData.data();
+			TempData.clear();
+			ColumnIndex = 0;
+			RowIndex++;
+		}
+		else
+		{
+			TempData.push_back(Character);
+		}
+	}
+	NewTable->mTable[RowIndex][ColumnIndex] = TempData.data();
+	return NewTable;
+}
+
+TypedDataTable::TypedDataTable()
+{
+}
+
+
+const std::wstring* TypedDataTable::GetColumnHeader(size_t ColumnIndex)
+{
+	if (ColumnIndex < mColumnHeaders.size())
+	{
+		return &mColumnHeaders[ColumnIndex];
+	}
+
+	return nullptr;
+}
+const std::vector<int32_t>* TypedDataTable::GetColumnInteger(size_t ColumnIndex) const
+{
+	if (ColumnIndex < mColumnHeaders.size())
+	{
+		return mIntegerValues[ColumnIndex] != nullptr ? mIntegerValues[ColumnIndex].get() : nullptr;
+	}
+
+	return nullptr;
+}
+const std::vector<float>* TypedDataTable::GetColumnFloat(size_t ColumnIndex) const
+{
+	if (ColumnIndex < mColumnHeaders.size())
+	{
+		return mFloatValues[ColumnIndex] != nullptr ? mFloatValues[ColumnIndex].get() : nullptr;
+	}
+
+	return nullptr;
+}
+const std::vector<std::wstring>* TypedDataTable::GetColumnString(size_t ColumnIndex) const
+{
+	if (ColumnIndex < mColumnHeaders.size())
+	{
+		return mStringValues[ColumnIndex] != nullptr ? mStringValues[ColumnIndex].get() : nullptr;
+	}
+
+	return nullptr;
+}
+
+namespace {
+	template<typename T>
+	void AddToColumn(std::unique_ptr<std::vector<T>>& ColumnValues, const T& Value, size_t TotalRows, size_t RowIndex)
+	{
+		if (!ColumnValues)
+		{
+			ColumnValues.reset(new std::vector<T>());
+			ColumnValues->resize(TotalRows);
+			memset(ColumnValues->data(), 0, sizeof(T)* TotalRows);
+		}
+
+		(*ColumnValues)[RowIndex] = Value;
+	}
+}
+
+TypedDataTablePtr TypedDataTable::CreateFromCSV(BinaryReader& Reader, uint32_t RowDataStarts, uint32_t RowForColumns, ProgressReporter ReportProgress)
+{
+	constexpr char CarriageReturn = '\n';
+	constexpr char Comma = ',';
+	size_t StartOfBuffer = Reader.GetReadPosition();
+	size_t NumColumns = 0;
+	size_t NumRows = 0;
+	size_t MaxLengthRow = 0;
+	size_t CurrentLengthRow = 0;
+	char Character = (char)Reader.ReadUInt8();
+
+	NumRows++;
+	NumColumns++;
+	while (Character != CarriageReturn && Reader.GetReadPosition() < Reader.GetDataLength())
+	{
+		CurrentLengthRow++;
+		if (Character == Comma)
+		{
+			MaxLengthRow = std::max(CurrentLengthRow, MaxLengthRow);
+			CurrentLengthRow = 0;
+			NumColumns++;
+		}
+		Character = (char)Reader.ReadUInt8();
+	}
+	NumRows++;
+	while (Reader.GetReadPosition() < Reader.GetDataLength())
+	{
+		Character = (char)Reader.ReadUInt8();
+		CurrentLengthRow++;
+
+		if (Character == CarriageReturn)
+		{
+			NumRows++;
+			MaxLengthRow = std::max(CurrentLengthRow, MaxLengthRow);
+			CurrentLengthRow = 0;
+		}
+	}
+
+	TypedDataTablePtr NewTable = std::make_shared<TypedDataTable>();
+	NewTable->mNumRows = NumRows;
+	NewTable->mColumnHeaders.resize(NumColumns);
+	NewTable->mIntegerValues.resize(NumColumns);
+	NewTable->mFloatValues.resize(NumColumns);
+	NewTable->mStringValues.resize(NumColumns);
+
+	Reader.Seek(StartOfBuffer);
+
+	size_t RowIndex = 0;
+	size_t ColumnIndex = 0;
+	std::wstring TempData;
+	TempData.reserve(MaxLengthRow);
+	while (Reader.GetReadPosition() < Reader.GetDataLength())
+	{
+		Character = (char)Reader.ReadUInt8();
+			
+		if (Character == Comma || Character == CarriageReturn)
+		{
+			if (RowIndex >= RowDataStarts)
+			{
+				NewTable->SerialiseCell(TempData, ColumnIndex, RowIndex - RowDataStarts);
+			}
+			else if (RowIndex == RowForColumns)
+			{
+				NewTable->mColumnHeaders[ColumnIndex] = TempData;
+			}
+			TempData.clear();
+
+			if (Character == Comma)
+			{
+				ColumnIndex++;
+			}
+			else if (Character == CarriageReturn)
+			{
+				ColumnIndex = 0;
+				RowIndex++;
+				if (ReportProgress)
+				{
+					ReportProgress(static_cast<float>(static_cast<double>(RowIndex) / static_cast<double>(NumRows)));
+				}
+			}
+		}
+		else
+		{
+			TempData.push_back(Character);
+		}
+	}
+
+	NewTable->SerialiseCell(TempData, ColumnIndex, RowIndex);
+
+		
+	for (auto Column = 0; Column < NumColumns; ++Column)
+	{
+		auto& FloatValues = NewTable->mFloatValues[Column];
+		auto& IntegerValues = NewTable->mIntegerValues[Column];
+		if (IntegerValues && FloatValues)
+		{
+			for (auto ValueIndex = 0; ValueIndex < IntegerValues->size(); ++ValueIndex)
+			{
+				(*FloatValues)[ValueIndex] = (*FloatValues)[ValueIndex] == 0.0f ? (float)(*IntegerValues)[ValueIndex] : (*FloatValues)[ValueIndex];
+			}
+			IntegerValues.reset();
+		}
+	}
+
+
+	return NewTable;
+}
+
+void TypedDataTable::SerialiseCell(const std::wstring& TempData, size_t ColumnIndex, size_t RowIndex)
+{
+	if (TempData.length() > 0)
+	{
+		try {
+
+			size_t CharactersProcessed = 0;
+			int32_t IntegerResult = std::stoi(TempData, &CharactersProcessed);
+			if (CharactersProcessed == TempData.length())
+			{
+				AddToColumn(mIntegerValues[ColumnIndex], IntegerResult, mNumRows, RowIndex);
+			}
+			else
+			{
+				// we are floats
+				size_t FloatCharactersProcessed = 0;
+				float FloatResult = std::stof(TempData, &FloatCharactersProcessed);
+				if (FloatCharactersProcessed == TempData.length())
+				{
+					AddToColumn(mFloatValues[ColumnIndex], FloatResult, mNumRows, RowIndex);
+				}
+			}
+
+			return;
+		}
+		catch (const std::invalid_argument&)
+		{
+
+		}
+	}
+
+	AddToColumn(mStringValues[ColumnIndex], TempData, mNumRows, RowIndex);
+}
