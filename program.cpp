@@ -42,7 +42,6 @@ void DisplayTable(char** result, int rows, int cols)
 Program::Program(OpenFileMethod InOpenFile, OpenFileMethod InNewFile)
     : OpenFile(std::move(InOpenFile))
     , NewFile(std::move(InNewFile))
-    , ActiveDatabase(nullptr)
 {
 }
 
@@ -68,14 +67,6 @@ bool Program::MainLoopUpdate()
   
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
     ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Once);
-    if ((!mAllTablesHandle || !mAllTablesHandle->IsValid()) && ActiveDatabase)
-    {
-        mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", ActiveDatabase);
-        if (!mAllTablesHandle->IsValid()) {
-            fprintf(stderr, "SQL error: %s\n", mAllTablesHandle->GetErrorMessage());
-            mAllTablesHandle = nullptr;
-        }
-    }
 
     if (ImGui::Begin("Database", &WindowOpen))
     {
@@ -87,7 +78,7 @@ bool Program::MainLoopUpdate()
                 ImGui::EndTabItem();
             }
 
-            if (ActiveDatabase)
+            if (mActiveDatabase)
             {
                 if (ImGui::BeginTabItem("SQL")) {
 
@@ -112,7 +103,7 @@ bool Program::MainLoopUpdate()
 
 void Program::Shutdown()
 {
-    sqlite3_close(ActiveDatabase);
+    
 }
 
 void Program::DrawSQLQueryView()
@@ -181,7 +172,7 @@ void Program::DrawSQLQueryView()
         char query[1024];
         snprintf(query, sizeof(query), "%s", editor.GetText().c_str());
 
-        mSQLTableHandle = TableHandle::BuildTable(query, ActiveDatabase);
+        mSQLTableHandle = TableHandle::BuildTable(query, mActiveDatabase);
 
         if (!mSQLTableHandle->IsValid()) {
             fprintf(stderr, "SQL error: %s\n", mSQLTableHandle->GetErrorMessage());
@@ -217,22 +208,11 @@ void Program::DrawTablesView()
     }
     if (FilePath.size() > 0)
     {
-        int rc;
-        if (ActiveDatabase)
-        {
-            mSQLTableHandle.reset();
-            mAllTablesHandle.reset();
-            mCurrentTableFullContents.reset();
-            mSelectedTableIndex = 0;
-            sqlite3_close(ActiveDatabase);
-        }
-        rc = sqlite3_open(FilePath.c_str(), &ActiveDatabase);
+        mActiveDatabase = DatabaseHandle::CreateDatabase(FilePath);
+        mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", mActiveDatabase);
 
-        if (rc) {
-            fprintf(stderr, "Failed to open database %s: %s", FilePath.c_str(), sqlite3_errmsg(ActiveDatabase));
-            sqlite3_close(ActiveDatabase);
-            exit(1);
-        }
+        mSQLTableHandle.reset();
+        mCurrentTableFullContents.reset();
     }
     ImGui::NewLine();
 
@@ -328,7 +308,7 @@ void Program::DrawAllTablesCombo()
             where = "1=1";
         }
         snprintf(q, sizeof(q), "select * from %s where %s", RawTable[mSelectedTableIndex + 1], where);
-        mCurrentTableFullContents = TableHandle::BuildTable(q, ActiveDatabase);
+        mCurrentTableFullContents = TableHandle::BuildTable(q, mActiveDatabase);
 
         if (!mCurrentTableFullContents->IsValid()) {
             fprintf(stderr, "SQL error: %s\n", mCurrentTableFullContents->GetErrorMessage());
@@ -336,28 +316,35 @@ void Program::DrawAllTablesCombo()
     }
 }
 
-std::shared_ptr<TableHandle> TableHandle::BuildTable(const char* Query, sqlite3* Database)
+std::shared_ptr<TableHandle> TableHandle::BuildTable(const char* Query, const std::shared_ptr<DatabaseHandle>& Database)
 {
-    std::shared_ptr<TableHandle> Table = std::make_shared <TableHandle>();
-    
-    const int ReturnCode = sqlite3_get_table(
-        Database,
-        Query,
-        &Table->mResult,
-        &Table->mRows,
-        &Table->mColumns,
-        &Table->mErrorMessage
-    );
+    std::shared_ptr<TableHandle> Table;
+    if (Database)
+    {
+        Table = std::make_shared <TableHandle>(Database);
 
-    if (ReturnCode != SQLITE_OK) {
-        if (Table->mResult)
-        {
-            sqlite3_free_table(Table->mResult);
-            Table->mResult = nullptr;
+        const int ReturnCode = sqlite3_get_table(
+            &Database->GetImpl(),
+            Query,
+            &Table->mResult,
+            &Table->mRows,
+            &Table->mColumns,
+            &Table->mErrorMessage
+        );
+
+        if (ReturnCode != SQLITE_OK) {
+            if (Table->mResult)
+            {
+                sqlite3_free_table(Table->mResult);
+                Table->mResult = nullptr;
+            }
         }
     }
-
     return Table;
+}
+
+TableHandle::TableHandle(std::shared_ptr<DatabaseHandle> Database)
+{
 }
 
 TableHandle::~TableHandle()
@@ -367,4 +354,39 @@ TableHandle::~TableHandle()
         sqlite3_free_table(mResult);
         mResult = nullptr;
     }
+}
+
+std::shared_ptr<DatabaseHandle> DatabaseHandle::CreateDatabase(const std::string& FilePath)
+{
+    std::shared_ptr<DatabaseHandle> Handle;
+    sqlite3* NewDatabase = nullptr;
+    const int ReturnCode = sqlite3_open(FilePath.c_str(), &NewDatabase);
+
+    if (ReturnCode) {
+        fprintf(stderr, "Failed to open database %s: %s", FilePath.c_str(), sqlite3_errmsg(NewDatabase));
+        if (NewDatabase)
+        {
+            sqlite3_close(NewDatabase);
+        }
+    }
+    else
+    {
+        Handle = std::make_shared<DatabaseHandle>(*NewDatabase);
+    }
+    return Handle;
+}
+
+DatabaseHandle::DatabaseHandle(sqlite3& Database)
+    : mDatabase(Database)
+{
+}
+
+DatabaseHandle::~DatabaseHandle()
+{
+    sqlite3_close(&mDatabase);
+}
+
+std::shared_ptr<TableHandle> DatabaseHandle::BuildTable(const char* Query)
+{
+    return TableHandle::BuildTable(Query, shared_from_this());
 }
