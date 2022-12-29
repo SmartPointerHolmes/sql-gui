@@ -77,7 +77,7 @@ int main(int , char** )
     GetWindowRect(GetDesktopWindow(), &desktop);
     WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, _T("SQLite Viewer"), NULL };
     RegisterClassEx(&wc);
-    HWND hwnd = CreateWindowEx(WS_EX_TOPMOST | WS_EX_LAYERED, wc.lpszClassName, _T("SQlite Viewer"), WS_POPUP, (desktop.right / 2) - (WindowWidth / 2), (desktop.bottom / 2) - (WindowHeight / 2), WindowWidth, WindowHeight, 0, 0, wc.hInstance, 0);
+    HWND hwnd = CreateWindowEx(WS_EX_LAYERED, wc.lpszClassName, _T("SQlite Viewer"), WS_POPUP, (desktop.right / 2) - (WindowWidth / 2), (desktop.bottom / 2) - (WindowHeight / 2), WindowWidth, WindowHeight, 0, 0, wc.hInstance, 0);
    
     SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
     //SetLayeredWindowAttributes(hwnd, RGB(0, 0, 0), 0, ULW_COLORKEY);
@@ -162,16 +162,16 @@ int main(int , char** )
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    const auto OpenFileMethod = [hwnd](const char* FileExtFilter) {
-        std::string Path;
-        Path.resize(MAX_PATH);
+    const auto OpenFileMethod = [hwnd](const char* FileExtFilter) -> std::string {
+        char Path[MAX_PATH];
+        memset(Path, 0, MAX_PATH);
         OPENFILENAME ofn;       // common dialog box structure
 
         // Initialize OPENFILENAME
         ZeroMemory(&ofn, sizeof(ofn));
         ofn.lStructSize = sizeof(ofn);
         ofn.hwndOwner = hwnd;
-        ofn.lpstrFile = &Path.front();
+        ofn.lpstrFile = Path;
         // Set lpstrFile[0] to '\0' so that GetOpenFileName does not 
         // use the contents of szFile to initialize itself.
         ofn.lpstrFile[0] = '\0';
@@ -188,16 +188,16 @@ int main(int , char** )
         }
         return std::string();
     };
-    const auto NewFileMethod = [hwnd](const char* FileExtFilter) {
-        std::string Path;
-        Path.resize(MAX_PATH);
+    const auto NewFileMethod = [hwnd](const char* FileExtFilter) -> std::string {
+        char Path[MAX_PATH];
+        memset(Path, 0, MAX_PATH);
         OPENFILENAME ofn;       // common dialog box structure
 
         // Initialize OPENFILENAME
         ZeroMemory(&ofn, sizeof(ofn));
         ofn.lStructSize = sizeof(ofn);
         ofn.hwndOwner = hwnd;
-        ofn.lpstrFile = &Path.front();
+        ofn.lpstrFile = Path;
         // Set lpstrFile[0] to '\0' so that GetOpenFileName does not 
         // use the contents of szFile to initialize itself.
         ofn.lpstrFile[0] = '\0';

@@ -1,7 +1,13 @@
 #include "program.h"
 #include "imgui/imgui.h"
+#include "Serialisation/BinaryReader.h"
+#include "Serialisation/DataTable.h"
 #include <tchar.h>
 #include <stdio.h>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+
 
 void DisplayTable(char** result, int rows, int cols)
 {
@@ -9,7 +15,7 @@ void DisplayTable(char** result, int rows, int cols)
         | ImGuiTableFlags_Borders
         | ImGuiTableFlags_RowBg
         | ImGuiTableFlags_Resizable
-        // | ImGuiTableFlags_Sortable  // we would have to sort the data ourselves
+        | ImGuiTableFlags_SizingFixedFit
         | ImGuiTableFlags_ScrollY
         ;
 
@@ -65,9 +71,6 @@ bool Program::MainLoopUpdate()
     ImGuiIO& io = ImGui::GetIO();
     bool WindowOpen = true;
   
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-    ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Once);
-
     if (ImGui::Begin("Database", &WindowOpen))
     {
         if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
@@ -192,23 +195,112 @@ void Program::DrawSQLQueryView()
 
 void Program::DrawTablesView()
 {
-    std::string FilePath;
+    std::string NewDatabaseFilePath;
     if (ImGui::Button("New Database")) {
         if (NewFile)
         {
-            FilePath = NewFile(".db\0");
+            NewDatabaseFilePath = NewFile(".db\0");
         }
     }
     ImGui::SameLine();
     if (ImGui::Button("Open Database")) {
         if (OpenFile)
         {
-            FilePath = OpenFile(".db\0");
+            NewDatabaseFilePath = OpenFile(".db\0");
         }
     }
-    if (FilePath.size() > 0)
+    if (mActiveDatabase)
     {
-        mActiveDatabase = DatabaseHandle::CreateDatabase(FilePath);
+        ImGui::SameLine();
+
+        ImGui::InputText("Table Name", mTableName, _MAX_PATH);
+        if (ImGui::Button("Import Table (.csv)")) {
+            if (OpenFile && mTableName[0])
+            {
+                TypedDataTablePtr IncomingDataTable;
+                std::string FilePath = OpenFile(".csv\0");
+                if (FilePath.size() > 0)
+                {
+                    std::ifstream InFileStream(FilePath);
+                    std::stringstream ss;
+                    if (InFileStream)
+                    {
+                        ss << InFileStream.rdbuf();
+                        const auto String = ss.str();
+                        BinaryReader Reader(reinterpret_cast<const uint8_t*>(String.data()), String.size());
+
+                        IncomingDataTable = TypedDataTable::CreateFromCSV(Reader, 1, 0, nullptr);
+                    }
+                }
+                if (IncomingDataTable)
+                {
+                    // create table in database
+                    std::stringstream Qss;
+                    Qss << "CREATE TABLE " << mTableName << " (";
+                    auto ColumnHeaders = IncomingDataTable->GetColumnHeaders();
+                    for (auto& Header : ColumnHeaders)
+                    {
+                        std::replace(Header.begin(), Header.end(), ' ', '_');
+                    }
+                    for (auto i = 0; i < ColumnHeaders.size(); i++)
+                    {
+                        Qss << ColumnHeaders[i] << " " << TypedDataTable::GetColumnDataTypeName(IncomingDataTable->GetColumnDataType(i));
+                        if (i != ColumnHeaders.size() - 1) Qss << ",";
+                    }
+                    Qss << " );";
+                    auto NewTable = mActiveDatabase->BuildTable(Qss.str().c_str());
+                    if (NewTable->IsValid())
+                    {
+                        std::stringstream InsertQuery;
+                        InsertQuery << "INSERT INTO " << mTableName << " VALUES (";
+                        for (auto i = 0; i < ColumnHeaders.size(); i++)
+                        {
+                            InsertQuery << "@" << ColumnHeaders[i];
+                            if (i != ColumnHeaders.size() - 1) InsertQuery << ",";
+                        }
+                        InsertQuery << ");";
+                        auto db = &mActiveDatabase->GetImpl();
+                        std::string Query = InsertQuery.str();
+                        sqlite3_stmt* Statement;
+                        char* sErrMsg = 0;
+                        const char* tail = 0;
+                        sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, &sErrMsg);
+
+                        if (sqlite3_prepare_v2(db, Query.c_str(), Query.length(), &Statement, &tail))
+                            fprintf(stderr, "Failed to prepare for entry %s: %s", FilePath.c_str(), sqlite3_errmsg(db));
+
+                        for (auto RowId = 0; RowId < IncomingDataTable->GetNumRows(); ++RowId)
+                        {
+                            for (auto ColumnId = 0; ColumnId < ColumnHeaders.size(); ++ColumnId)
+                            {
+                                if (const auto* String = IncomingDataTable->GetCellAsString(RowId, ColumnId))
+                                {
+                                    sqlite3_bind_text(Statement, ColumnId + 1, String->c_str(), String->length(), SQLITE_TRANSIENT);
+                                }
+                                else { return; }
+                            }
+
+                            sqlite3_step(Statement);
+
+                            sqlite3_clear_bindings(Statement);
+                            sqlite3_reset(Statement);
+                        }
+
+                        sqlite3_exec(db, "END TRANSACTION", NULL, NULL, &sErrMsg);
+                    }
+                    else
+                    {
+                        fprintf(stderr, "SQL error: %s\n", NewTable->GetErrorMessage());
+                    }
+                    mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", mActiveDatabase);
+
+                }
+            }
+        }
+    }
+    if (NewDatabaseFilePath.size() > 0)
+    {
+        mActiveDatabase = DatabaseHandle::CreateDatabase(NewDatabaseFilePath);
         mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", mActiveDatabase);
 
         mSQLTableHandle.reset();
@@ -220,7 +312,7 @@ void Program::DrawTablesView()
     {
         DrawAllTablesCombo();
 
-        if (mCurrentTableFullContents->IsValid())
+        if (mCurrentTableFullContents)
         {
             ImGui::Text("%d rows, %d cols", mCurrentTableFullContents->GetRows(), mCurrentTableFullContents->GetColumns());
 
@@ -235,7 +327,7 @@ void Program::DrawRecordsView()
     {
         DrawAllTablesCombo();
 
-        if (mCurrentTableFullContents->IsValid())
+        if (mCurrentTableFullContents && mCurrentTableFullContents->IsValid())
         {
             const int rows = mCurrentTableFullContents->GetRows();
             const int cols = mCurrentTableFullContents->GetColumns();
@@ -291,27 +383,26 @@ void Program::DrawRecordsView()
 
 void Program::DrawAllTablesCombo()
 {
+    if (mAllTablesHandle->GetRows() < 1)
+        return;
     auto RawTable = mAllTablesHandle->GetTable();
     // pick a table
     int SelectedTableIndex = mSelectedTableIndex;
     ImGui::Combo("Table", &SelectedTableIndex, &RawTable[1], mAllTablesHandle->GetRows());
+    
+    if (mAllTablesHandle->GetColumns() > mSelectedTableIndex);
 
     if (SelectedTableIndex != mSelectedTableIndex || (!mCurrentTableFullContents || !mCurrentTableFullContents->IsValid()))
     {
         mSelectedTableIndex = SelectedTableIndex;
-        static char filter[1024];
-        ImGui::InputText("Filter", filter, sizeof(filter));
-
         char q[256];
-        const char* where = filter;
-        if (!strlen(where)) {
-            where = "1=1";
-        }
-        snprintf(q, sizeof(q), "select * from %s where %s", RawTable[mSelectedTableIndex + 1], where);
+        snprintf(q, sizeof(q), "select * from %s", RawTable[mSelectedTableIndex + 1]);
         mCurrentTableFullContents = TableHandle::BuildTable(q, mActiveDatabase);
 
         if (!mCurrentTableFullContents->IsValid()) {
             fprintf(stderr, "SQL error: %s\n", mCurrentTableFullContents->GetErrorMessage());
+            mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", mActiveDatabase);
+
         }
     }
 }
@@ -389,4 +480,12 @@ DatabaseHandle::~DatabaseHandle()
 std::shared_ptr<TableHandle> DatabaseHandle::BuildTable(const char* Query)
 {
     return TableHandle::BuildTable(Query, shared_from_this());
+}
+
+const char* DatabaseHandle::RunQuery(const char* Query)
+{
+    char* Result = nullptr;
+    const auto RC = sqlite3_exec(
+        &mDatabase, Query, nullptr, nullptr, &Result);
+    return RC ? Result : nullptr;
 }

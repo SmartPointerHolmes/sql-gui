@@ -56,6 +56,7 @@ public:
 	DatabaseHandle& operator=(const DatabaseHandle&& Rhs) = delete;
 
 	std::shared_ptr<TableHandle> BuildTable(const char* Query);
+	const char* RunQuery(const char* Query);
 
 	sqlite3& GetImpl() const { return mDatabase; }
 
@@ -91,5 +92,5 @@ private:
 	std::shared_ptr<TableHandle> mAllTablesHandle;
 	std::shared_ptr<TableHandle> mCurrentTableFullContents;
 	int mSelectedTableIndex = 0;
-
+	char mTableName[_MAX_PATH] = { 0 };
 };
