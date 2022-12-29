@@ -2,12 +2,13 @@
 #include "DataTable.h"
 #include "BinaryReader.h"
 #include <stdexcept>
+#include <sstream>
 
 DataTable::DataTable()
 {
 }
 
-const std::wstring *const  DataTable::GetCell(size_t Row, size_t Column)const
+const std::string *const  DataTable::GetCell(size_t Row, size_t Column)const
 {
 	if (GetNumRows() > Row && GetNumColumns() > Column)
 	{
@@ -25,7 +26,7 @@ void DataTable::SetSize(size_t NumRows, size_t NumColumns)
 	}
 }
 
-void DataTable::SetCell(size_t RowIndex, size_t ColumnIndex, std::wstring& Value)
+void DataTable::SetCell(size_t RowIndex, size_t ColumnIndex, std::string& Value)
 {
 	if (RowIndex < mTable.size())
 	{
@@ -36,7 +37,7 @@ void DataTable::SetCell(size_t RowIndex, size_t ColumnIndex, std::wstring& Value
 		}
 	}
 }
-void DataTable::SetRow(size_t RowIndex, const std::vector<std::wstring>& Values)
+void DataTable::SetRow(size_t RowIndex, const std::vector<std::string>& Values)
 {
 	if (RowIndex < mTable.size())
 	{
@@ -77,6 +78,7 @@ DataTablePtr DataTable::CreateFromCSV(BinaryReader & Reader)
 {
 	constexpr char CarriageReturn = '\n';
 	constexpr char Comma = ',';
+	constexpr char DoubleQuote = '\"';
 	size_t StartOfBuffer = Reader.GetReadPosition();
 	size_t NumColumns = 0;
 	size_t NumRows = 0;
@@ -86,7 +88,7 @@ DataTablePtr DataTable::CreateFromCSV(BinaryReader & Reader)
 
 	NumRows++;
 	NumColumns++;
-	while (Character != CarriageReturn && Reader.GetReadPosition() < Reader.GetDataLength())
+	while (Character != CarriageReturn && Character != DoubleQuote && Reader.GetReadPosition() < Reader.GetDataLength())
 	{
 		CurrentLengthRow++;
 		if (Character == Comma)
@@ -120,30 +122,38 @@ DataTablePtr DataTable::CreateFromCSV(BinaryReader & Reader)
 
 	Reader.Seek(StartOfBuffer);
 
+	bool CaptureWholeStream = false;
 	size_t RowIndex = 0;
 	size_t ColumnIndex = 0;
-	std::wstring TempData;
+	std::string TempData;
 	TempData.reserve(MaxLengthRow);
 	while (Reader.GetReadPosition() < Reader.GetDataLength())
 	{
 		Character = (char)Reader.ReadUInt8();
-		if (Character == Comma)
+		if (Character == DoubleQuote)
 		{
-			NewTable->mTable[RowIndex][ColumnIndex] = TempData.data();
-			ColumnIndex++;
-			TempData.clear();
+			CaptureWholeStream = !CaptureWholeStream;
 		}
-		else if (Character == CarriageReturn)
+		if (!CaptureWholeStream)
 		{
-			NewTable->mTable[RowIndex][ColumnIndex] = TempData.data();
-			TempData.clear();
-			ColumnIndex = 0;
-			RowIndex++;
+			if (Character == Comma)
+			{
+				NewTable->mTable[RowIndex][ColumnIndex] = TempData.data();
+				ColumnIndex++;
+				TempData.clear();
+				continue;
+			}
+			else if (Character == CarriageReturn)
+			{
+				NewTable->mTable[RowIndex][ColumnIndex] = TempData.data();
+				TempData.clear();
+				ColumnIndex = 0;
+				RowIndex++;
+				continue;
+			}
 		}
-		else
-		{
-			TempData.push_back(Character);
-		}
+		
+		TempData.push_back(Character);
 	}
 	NewTable->mTable[RowIndex][ColumnIndex] = TempData.data();
 	return NewTable;
@@ -154,7 +164,7 @@ TypedDataTable::TypedDataTable()
 }
 
 
-const std::wstring* TypedDataTable::GetColumnHeader(size_t ColumnIndex)
+const std::string* TypedDataTable::GetColumnHeader(size_t ColumnIndex)
 {
 	if (ColumnIndex < mColumnHeaders.size())
 	{
@@ -162,6 +172,15 @@ const std::wstring* TypedDataTable::GetColumnHeader(size_t ColumnIndex)
 	}
 
 	return nullptr;
+}
+ColumnDataType TypedDataTable::GetColumnDataType(size_t ColumnIndex)
+{
+	if (ColumnIndex < mColumnDataTypes.size())
+	{
+		return mColumnDataTypes[ColumnIndex];
+	}
+
+	return ColumnDataType::Unknown;
 }
 const std::vector<int32_t>* TypedDataTable::GetColumnInteger(size_t ColumnIndex) const
 {
@@ -181,13 +200,28 @@ const std::vector<float>* TypedDataTable::GetColumnFloat(size_t ColumnIndex) con
 
 	return nullptr;
 }
-const std::vector<std::wstring>* TypedDataTable::GetColumnString(size_t ColumnIndex) const
+const std::vector<std::string>* TypedDataTable::GetColumnString(size_t ColumnIndex) const
 {
 	if (ColumnIndex < mColumnHeaders.size())
 	{
 		return mStringValues[ColumnIndex] != nullptr ? mStringValues[ColumnIndex].get() : nullptr;
 	}
 
+	return nullptr;
+}
+
+const std::string*const TypedDataTable::GetCellAsString(size_t Row, size_t Column) const
+{
+	if (Column < mStringValues.size())
+	{
+		if (mStringValues[Column])
+		{
+			if (Row < mStringValues[Column]->size())
+			{
+				return &((*mStringValues[Column])[Row]);
+			}
+		}
+	}
 	return nullptr;
 }
 
@@ -204,12 +238,25 @@ namespace {
 
 		(*ColumnValues)[RowIndex] = Value;
 	}
+
+	void AddToColumn(std::unique_ptr<std::vector<std::string>>& ColumnValues, const std::string& Value, size_t TotalRows, size_t RowIndex)
+	{
+		if (!ColumnValues)
+		{
+			ColumnValues.reset(new std::vector<std::string>());
+			ColumnValues->resize(TotalRows);
+		}
+
+		(*ColumnValues)[RowIndex] = Value;
+	}
 }
 
 TypedDataTablePtr TypedDataTable::CreateFromCSV(BinaryReader& Reader, uint32_t RowDataStarts, uint32_t RowForColumns, ProgressReporter ReportProgress)
 {
 	constexpr char CarriageReturn = '\n';
 	constexpr char Comma = ',';
+	constexpr char DoubleQuote = '\"';
+
 	size_t StartOfBuffer = Reader.GetReadPosition();
 	size_t NumColumns = 0;
 	size_t NumRows = 0;
@@ -219,7 +266,7 @@ TypedDataTablePtr TypedDataTable::CreateFromCSV(BinaryReader& Reader, uint32_t R
 
 	NumRows++;
 	NumColumns++;
-	while (Character != CarriageReturn && Reader.GetReadPosition() < Reader.GetDataLength())
+	while (Character != CarriageReturn && Character != DoubleQuote && Reader.GetReadPosition() < Reader.GetDataLength())
 	{
 		CurrentLengthRow++;
 		if (Character == Comma)
@@ -247,21 +294,26 @@ TypedDataTablePtr TypedDataTable::CreateFromCSV(BinaryReader& Reader, uint32_t R
 	TypedDataTablePtr NewTable = std::make_shared<TypedDataTable>();
 	NewTable->mNumRows = NumRows;
 	NewTable->mColumnHeaders.resize(NumColumns);
+	NewTable->mColumnDataTypes.resize(NumColumns);
 	NewTable->mIntegerValues.resize(NumColumns);
 	NewTable->mFloatValues.resize(NumColumns);
 	NewTable->mStringValues.resize(NumColumns);
 
 	Reader.Seek(StartOfBuffer);
 
+	bool CaptureWholeStream = false;
 	size_t RowIndex = 0;
 	size_t ColumnIndex = 0;
-	std::wstring TempData;
+	std::string TempData;
 	TempData.reserve(MaxLengthRow);
 	while (Reader.GetReadPosition() < Reader.GetDataLength())
 	{
 		Character = (char)Reader.ReadUInt8();
-			
-		if (Character == Comma || Character == CarriageReturn)
+		if (Character == DoubleQuote)
+		{
+			CaptureWholeStream = !CaptureWholeStream;
+		}
+		if (!CaptureWholeStream && (Character == Comma || Character == CarriageReturn))
 		{
 			if (RowIndex >= RowDataStarts)
 			{
@@ -310,11 +362,36 @@ TypedDataTablePtr TypedDataTable::CreateFromCSV(BinaryReader& Reader, uint32_t R
 		}
 	}
 
+	for (auto ColumnIndex = 0; ColumnIndex < NumColumns; ++ColumnIndex)
+	{
+		const auto& FloatValues = NewTable->mFloatValues[ColumnIndex];
+		const auto& StringValues = NewTable->mStringValues[ColumnIndex];
+		const auto& IntValues = NewTable->mIntegerValues[ColumnIndex];
+
+		int DataTypeMask = static_cast<int>(ColumnDataType::Unknown);
+		if (FloatValues)
+		{
+			DataTypeMask |= static_cast<int>(ColumnDataType::Real);
+		}
+		if (IntValues)
+		{
+			DataTypeMask |= static_cast<int>(ColumnDataType::Integer);
+		}
+
+		if (StringValues && DataTypeMask == static_cast<int>(ColumnDataType::Unknown))
+		{
+			DataTypeMask = static_cast<int>(ColumnDataType::Text);
+		}
+
+		NewTable->mColumnDataTypes[ColumnIndex] = static_cast<ColumnDataType>(DataTypeMask);
+		
+	}
+
 
 	return NewTable;
 }
 
-void TypedDataTable::SerialiseCell(const std::wstring& TempData, size_t ColumnIndex, size_t RowIndex)
+void TypedDataTable::SerialiseCell(const std::string& TempData, size_t ColumnIndex, size_t RowIndex)
 {
 	if (TempData.length() > 0)
 	{
@@ -336,14 +413,12 @@ void TypedDataTable::SerialiseCell(const std::wstring& TempData, size_t ColumnIn
 					AddToColumn(mFloatValues[ColumnIndex], FloatResult, mNumRows, RowIndex);
 				}
 			}
-
-			return;
 		}
-		catch (const std::invalid_argument&)
+		catch (const std::exception&)
 		{
 
 		}
+		AddToColumn(mStringValues[ColumnIndex], TempData, mNumRows, RowIndex);
 	}
 
-	AddToColumn(mStringValues[ColumnIndex], TempData, mNumRows, RowIndex);
 }
