@@ -8,7 +8,7 @@
 #include <fstream>
 #include <sstream>
 
-void CreateTableFromCSV(std::shared_ptr<DatabaseHandle>& Database, TypedDataTablePtr IncomingDataTable, const char TableName)
+void CreateTableFromCSV(std::shared_ptr<DatabaseHandle>& Database, TypedDataTablePtr IncomingDataTable, const char* TableName)
 {
     assert(Database);
     if (IncomingDataTable)
@@ -183,12 +183,22 @@ void Program::DrawSQLQueryView()
     char* err_msg = NULL;
     bool do_query = false;
 
-    if (ImGui::GetFrameCount() == 1) do_query = true;
+
+    if (mAllTablesHandle->GetRows())
+    {
+        auto RawTable = mAllTablesHandle->GetTable();
+        int Selected = -1;
+        ImGui::SetNextItemWidth(100.0f);
+        ImGui::ListBox("", &Selected, &RawTable[1], mAllTablesHandle->GetRows(), 4);
+    }
 
     ImVec2 size(
-        ImGui::GetContentRegionAvail().x - 100 - style.FramePadding.x,
-        ImGui::GetTextLineHeight() * 5
+        ImGui::GetContentRegionAvail().x - 200.0f - style.FramePadding.x,
+        ImGui::GetTextLineHeight() * 7
     );
+
+    ImGui::SameLine();
+
     editor.Render("SQL", size, true);
     ImVec2 bottom_corner = ImGui::GetItemRectMax();
 
@@ -262,14 +272,16 @@ void Program::DrawSQLQueryView()
 void Program::DrawTablesView()
 {
     std::string NewDatabaseFilePath;
-    if (ImGui::Button("New Database")) {
+    bool CreateNew = false;
+    if (ImGui::Button("New Accounting Database")) {
         if (NewFile)
         {
             NewDatabaseFilePath = NewFile(".db\0");
+            CreateNew = true;
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Open Database")) {
+    if (ImGui::Button("Open Accounting Database")) {
         if (OpenFile)
         {
             NewDatabaseFilePath = OpenFile(".db\0");
@@ -279,9 +291,8 @@ void Program::DrawTablesView()
     {
         ImGui::SameLine();
 
-        ImGui::InputText("Table Name", mTableName, _MAX_PATH);
-        if (ImGui::Button("Import Table (.csv)")) {
-            if (OpenFile && mTableName[0])
+        if (ImGui::Button("Import Transactions (.csv)")) {
+            if (OpenFile)
             {
                 TypedDataTablePtr IncomingDataTable;
                 std::string FilePath = OpenFile(".csv\0");
@@ -300,7 +311,7 @@ void Program::DrawTablesView()
 
                     if (IncomingDataTable)
                     {
-
+                       // CreateTableFromCSV(mActiveDatabase, IncomingDataTable, "Transactions_Temp");
                         mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", mActiveDatabase);
                     }
                 }
@@ -311,6 +322,36 @@ void Program::DrawTablesView()
     if (NewDatabaseFilePath.size() > 0)
     {
         mActiveDatabase = DatabaseHandle::CreateDatabase(NewDatabaseFilePath);
+        if (CreateNew)
+        {
+            const char* CreateTransactions = "CREATE TABLE Transactions ("
+                "Date INTEGER NOT NULL,"
+                "Description TEXT NOT NULL,"
+                "Amount REAL NOT NULL,"
+                "Balance REAL NOT NULL,"
+                "Account_Number TEXT NOT NULL,"
+                "Category TEXT,"
+                "PRIMARY KEY(Date, Balance)"
+                ");";
+
+            const char* CreateBudget = "CREATE TABLE Budget ("
+                "Category TEXT NOT NULL PRIMARY KEY,"
+                "Current_Total REAL,"
+                "Goal REAL,"
+                "Monthly_Allocation REAL"
+                ");";
+
+            const char* CreateAccounts = "CREATE TABLE Accounts ("
+                "Account_Number TEXT NOT NULL PRIMARY KEY,"
+                "Balance REAL NOT NULL,"
+                "Description TEXT NOT NULL"
+                ");";
+
+            mActiveDatabase->BuildTable(CreateAccounts);
+            mActiveDatabase->BuildTable(CreateBudget);
+            mActiveDatabase->BuildTable(CreateTransactions);
+
+        }
         mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", mActiveDatabase);
 
         mSQLTableHandle.reset();
