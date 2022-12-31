@@ -8,6 +8,74 @@
 #include <fstream>
 #include <sstream>
 
+void CreateTableFromCSV(std::shared_ptr<DatabaseHandle>& Database, TypedDataTablePtr IncomingDataTable, const char TableName)
+{
+    assert(Database);
+    if (IncomingDataTable)
+    {
+        // create table in database
+        std::stringstream Qss;
+        Qss << "CREATE TABLE " << TableName << " (";
+        auto ColumnHeaders = IncomingDataTable->GetColumnHeaders();
+        for (auto& Header : ColumnHeaders)
+        {
+            std::replace(Header.begin(), Header.end(), ' ', '_');
+        }
+        for (auto i = 0; i < ColumnHeaders.size(); i++)
+        {
+            Qss << ColumnHeaders[i] << " " << TypedDataTable::GetColumnDataTypeName(IncomingDataTable->GetColumnDataType(i));
+            if (i != ColumnHeaders.size() - 1) Qss << ",";
+        }
+        Qss << " );";
+        auto NewTable = Database->BuildTable(Qss.str().c_str());
+        if (NewTable->IsValid())
+        {
+            std::stringstream InsertQuery;
+            InsertQuery << "INSERT INTO " << TableName << " VALUES (";
+            for (auto i = 0; i < ColumnHeaders.size(); i++)
+            {
+                InsertQuery << "@" << ColumnHeaders[i];
+                if (i != ColumnHeaders.size() - 1) InsertQuery << ",";
+            }
+            InsertQuery << ");";
+            auto db = &Database->GetImpl();
+            std::string Query = InsertQuery.str();
+            sqlite3_stmt* Statement;
+            char* sErrMsg = 0;
+            const char* tail = 0;
+            sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, &sErrMsg);
+
+            if (sqlite3_prepare_v2(db, Query.c_str(), Query.length(), &Statement, &tail))
+                fprintf(stderr, "Failed to prepare for entry %s: %s", TableName, sqlite3_errmsg(db));
+
+            for (auto RowId = 0; RowId < IncomingDataTable->GetNumRows(); ++RowId)
+            {
+                for (auto ColumnId = 0; ColumnId < ColumnHeaders.size(); ++ColumnId)
+                {
+                    if (const auto* String = IncomingDataTable->GetCellAsString(RowId, ColumnId))
+                    {
+                        sqlite3_bind_text(Statement, ColumnId + 1, String->c_str(), String->length(), SQLITE_TRANSIENT);
+                    }
+                    else { return; }
+                }
+
+                sqlite3_step(Statement);
+
+                sqlite3_clear_bindings(Statement);
+                sqlite3_reset(Statement);
+            }
+
+            sqlite3_exec(db, "END TRANSACTION", NULL, NULL, &sErrMsg);
+        }
+        else
+        {
+            fprintf(stderr, "SQL error: %s\n", NewTable->GetErrorMessage());
+        }
+        
+    }
+
+    return std::shared_ptr<TableHandle>();
+}
 
 void DisplayTable(char** result, int rows, int cols)
 {
@@ -231,70 +299,14 @@ void Program::DrawTablesView()
 
                         IncomingDataTable = TypedDataTable::CreateFromCSV(Reader, 1, 0, nullptr);
                     }
+
+                    if (IncomingDataTable)
+                    {
+
+                        mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", mActiveDatabase);
+                    }
                 }
-                if (IncomingDataTable)
-                {
-                    // create table in database
-                    std::stringstream Qss;
-                    Qss << "CREATE TABLE " << mTableName << " (";
-                    auto ColumnHeaders = IncomingDataTable->GetColumnHeaders();
-                    for (auto& Header : ColumnHeaders)
-                    {
-                        std::replace(Header.begin(), Header.end(), ' ', '_');
-                    }
-                    for (auto i = 0; i < ColumnHeaders.size(); i++)
-                    {
-                        Qss << ColumnHeaders[i] << " " << TypedDataTable::GetColumnDataTypeName(IncomingDataTable->GetColumnDataType(i));
-                        if (i != ColumnHeaders.size() - 1) Qss << ",";
-                    }
-                    Qss << " );";
-                    auto NewTable = mActiveDatabase->BuildTable(Qss.str().c_str());
-                    if (NewTable->IsValid())
-                    {
-                        std::stringstream InsertQuery;
-                        InsertQuery << "INSERT INTO " << mTableName << " VALUES (";
-                        for (auto i = 0; i < ColumnHeaders.size(); i++)
-                        {
-                            InsertQuery << "@" << ColumnHeaders[i];
-                            if (i != ColumnHeaders.size() - 1) InsertQuery << ",";
-                        }
-                        InsertQuery << ");";
-                        auto db = &mActiveDatabase->GetImpl();
-                        std::string Query = InsertQuery.str();
-                        sqlite3_stmt* Statement;
-                        char* sErrMsg = 0;
-                        const char* tail = 0;
-                        sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, &sErrMsg);
-
-                        if (sqlite3_prepare_v2(db, Query.c_str(), Query.length(), &Statement, &tail))
-                            fprintf(stderr, "Failed to prepare for entry %s: %s", FilePath.c_str(), sqlite3_errmsg(db));
-
-                        for (auto RowId = 0; RowId < IncomingDataTable->GetNumRows(); ++RowId)
-                        {
-                            for (auto ColumnId = 0; ColumnId < ColumnHeaders.size(); ++ColumnId)
-                            {
-                                if (const auto* String = IncomingDataTable->GetCellAsString(RowId, ColumnId))
-                                {
-                                    sqlite3_bind_text(Statement, ColumnId + 1, String->c_str(), String->length(), SQLITE_TRANSIENT);
-                                }
-                                else { return; }
-                            }
-
-                            sqlite3_step(Statement);
-
-                            sqlite3_clear_bindings(Statement);
-                            sqlite3_reset(Statement);
-                        }
-
-                        sqlite3_exec(db, "END TRANSACTION", NULL, NULL, &sErrMsg);
-                    }
-                    else
-                    {
-                        fprintf(stderr, "SQL error: %s\n", NewTable->GetErrorMessage());
-                    }
-                    mAllTablesHandle = TableHandle::BuildTable("select name from sqlite_master where type='table'", mActiveDatabase);
-
-                }
+                
             }
         }
     }
