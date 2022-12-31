@@ -73,8 +73,6 @@ void CreateTableFromCSV(std::shared_ptr<DatabaseHandle>& Database, TypedDataTabl
         }
         
     }
-
-    return std::shared_ptr<TableHandle>();
 }
 
 void DisplayTable(char** result, int rows, int cols)
