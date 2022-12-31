@@ -391,33 +391,92 @@ TypedDataTablePtr TypedDataTable::CreateFromCSV(BinaryReader& Reader, uint32_t R
 	return NewTable;
 }
 
+bool StringToInteger(const std::string& String, int32_t& Output)
+{
+	const char* nptr = String.c_str();                     /* string to read               */
+	char* endptr = NULL;                            /* pointer to additional chars  */
+	int base = 10;    /* numeric base (default 10)    */
+
+	/* reset errno to 0 before call */
+	errno = 0;
+
+	/* call to strtol assigning return to number */
+	Output = strtol(nptr, &endptr, base);
+
+	/* output original string of characters considered */
+	printf("\n string : %s\n endptr : %s\n\n", nptr, endptr);
+
+	/* test return to number and errno values */
+	if (nptr == endptr)
+		printf(" number : %lu  invalid  (no digits found, 0 returned)\n", Output);
+	else if (errno == ERANGE && Output == LONG_MIN)
+		printf(" number : %lu  invalid  (underflow occurred)\n", Output);
+	else if (errno == ERANGE && Output == LONG_MAX)
+		printf(" number : %lu  invalid  (overflow occurred)\n", Output);
+	else if (errno == EINVAL)  /* not in all c99 implementations - gcc OK */
+		printf(" number : %lu  invalid  (base contains unsupported value)\n", Output);
+	else if (errno != 0 && Output == 0)
+		printf(" number : %lu  invalid  (unspecified error occurred)\n", Output);
+	else if (errno == 0 && nptr && !*endptr)
+		printf(" number : %lu    valid  (and represents all characters read)\n", Output);
+	else if (errno == 0 && nptr && *endptr != 0)
+		printf(" number : %lu    valid  (but additional characters remain)\n", Output);
+	else
+		return true;
+
+	return false;
+}
+
+bool StringToFloat(const std::string& String, float& Output)
+{
+	const char* nptr = String.c_str();                     /* string to read               */
+	char* endptr = NULL;                            /* pointer to additional chars  */
+
+	/* reset errno to 0 before call */
+	errno = 0;
+
+	/* call to strtol assigning return to number */
+	Output = strtof(nptr, &endptr);
+
+	/* output original string of characters considered */
+	printf("\n string : %s\n endptr : %s\n\n", nptr,  endptr);
+
+	/* test return to number and errno values */
+	if (nptr == endptr)
+		printf(" number : %f  invalid  (no digits found, 0 returned)\n", Output);
+	else if (errno == ERANGE && Output == FLT_MIN)
+		printf(" number : %f  invalid  (underflow occurred)\n", Output);
+	else if (errno == ERANGE && Output == FLT_MAX)
+		printf(" number : %f  invalid  (overflow occurred)\n", Output);
+	else if (errno == EINVAL)  /* not in all c99 implementations - gcc OK */
+		printf(" number : %f  invalid  (base contains unsupported value)\n", Output);
+	else if (errno != 0 && Output == 0)
+		printf(" number : %f  invalid  (unspecified error occurred)\n", Output);
+	else if (errno == 0 && nptr && !*endptr)
+		printf(" number : %f    valid  (and represents all characters read)\n", Output);
+	else if (errno == 0 && nptr && *endptr != 0)
+		printf(" number : %f    valid  (but additional characters remain)\n", Output);
+	else
+		return true;
+
+	return false;
+}
+
 void TypedDataTable::SerialiseCell(const std::string& TempData, size_t ColumnIndex, size_t RowIndex)
 {
 	if (TempData.length() > 0)
 	{
-		try {
-
-			size_t CharactersProcessed = 0;
-			int32_t IntegerResult = std::stoi(TempData, &CharactersProcessed);
-			if (CharactersProcessed == TempData.length())
-			{
-				AddToColumn(mIntegerValues[ColumnIndex], IntegerResult, mNumRows, RowIndex);
-			}
-			else
-			{
-				// we are floats
-				size_t FloatCharactersProcessed = 0;
-				float FloatResult = std::stof(TempData, &FloatCharactersProcessed);
-				if (FloatCharactersProcessed == TempData.length())
-				{
-					AddToColumn(mFloatValues[ColumnIndex], FloatResult, mNumRows, RowIndex);
-				}
-			}
-		}
-		catch (const std::exception&)
+		int32_t IntegerResult = 0;
+		float FloatResult = 0.0f;
+		if (StringToInteger(TempData, IntegerResult))
 		{
-
+			AddToColumn(mIntegerValues[ColumnIndex], IntegerResult, mNumRows, RowIndex);
 		}
+		else if (StringToFloat(TempData, FloatResult))
+		{
+			AddToColumn(mFloatValues[ColumnIndex], FloatResult, mNumRows, RowIndex);
+		}
+
 		AddToColumn(mStringValues[ColumnIndex], TempData, mNumRows, RowIndex);
 	}
 
